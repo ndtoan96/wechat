@@ -8,6 +8,7 @@ import { Consumer } from 'mediasoup/node/lib/Consumer';
 import { createWorker } from 'mediasoup';
 import { DtlsParameters, WebRtcTransportOptions } from 'mediasoup/node/lib/WebRtcTransport';
 import { constants as httpConstants } from 'http2';
+import { RouterOptions } from 'mediasoup/node/lib/Router';
 
 const corsOptions = {
     origin: ["http://127.0.0.1:3000", "http://localhost:3000"],
@@ -18,6 +19,60 @@ const webRtcTransportOptions: WebRtcTransportOptions = {
     enableTcp: true,
     enableUdp: true,
     preferUdp: true,
+};
+
+const routerOptions: RouterOptions = {
+    mediaCodecs: [
+        {
+            kind: 'audio',
+            mimeType: 'audio/opus',
+            clockRate: 48000,
+            channels: 2
+        },
+        {
+            kind: 'video',
+            mimeType: 'video/VP8',
+            clockRate: 90000,
+            parameters:
+            {
+                'x-google-start-bitrate': 1000
+            }
+        },
+        {
+            kind: 'video',
+            mimeType: 'video/VP9',
+            clockRate: 90000,
+            parameters:
+            {
+                'profile-id': 2,
+                'x-google-start-bitrate': 1000
+            }
+        },
+        {
+            kind: 'video',
+            mimeType: 'video/h264',
+            clockRate: 90000,
+            parameters:
+            {
+                'packetization-mode': 1,
+                'profile-level-id': '4d0032',
+                'level-asymmetry-allowed': 1,
+                'x-google-start-bitrate': 1000
+            }
+        },
+        {
+            kind: 'video',
+            mimeType: 'video/h264',
+            clockRate: 90000,
+            parameters:
+            {
+                'packetization-mode': 1,
+                'profile-level-id': '42e01f',
+                'level-asymmetry-allowed': 1,
+                'x-google-start-bitrate': 1000
+            }
+        }
+    ]
 };
 
 const port = process.env.PORT || 3001;
@@ -77,59 +132,7 @@ io.of("/room").on("connection", (socket) => {
 
 const init = async () => {
     const worker = await createWorker();
-    const mediasoupRouter = await worker.createRouter({
-        mediaCodecs: [
-            {
-                kind: 'audio',
-                mimeType: 'audio/opus',
-                clockRate: 48000,
-                channels: 2
-            },
-            {
-                kind: 'video',
-                mimeType: 'video/VP8',
-                clockRate: 90000,
-                parameters:
-                {
-                    'x-google-start-bitrate': 1000
-                }
-            },
-            {
-                kind: 'video',
-                mimeType: 'video/VP9',
-                clockRate: 90000,
-                parameters:
-                {
-                    'profile-id': 2,
-                    'x-google-start-bitrate': 1000
-                }
-            },
-            {
-                kind: 'video',
-                mimeType: 'video/h264',
-                clockRate: 90000,
-                parameters:
-                {
-                    'packetization-mode': 1,
-                    'profile-level-id': '4d0032',
-                    'level-asymmetry-allowed': 1,
-                    'x-google-start-bitrate': 1000
-                }
-            },
-            {
-                kind: 'video',
-                mimeType: 'video/h264',
-                clockRate: 90000,
-                parameters:
-                {
-                    'packetization-mode': 1,
-                    'profile-level-id': '42e01f',
-                    'level-asymmetry-allowed': 1,
-                    'x-google-start-bitrate': 1000
-                }
-            }
-        ]
-    });
+    const mediasoupRouter = await worker.createRouter(routerOptions);
 
     // Return information of all connected peers in the room
     apiRouter.get("/peers", (_, res) => {
