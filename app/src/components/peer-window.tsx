@@ -2,7 +2,7 @@ import { Consumer } from "mediasoup-client/lib/Consumer";
 import React, { useEffect, useRef } from "react";
 
 interface PeerWindowProps {
-    consumers_promises: (Promise<Consumer> | undefined)[]
+    consumers: Consumer[];
 }
 
 export default function PeerWindow(props: PeerWindowProps) {
@@ -10,17 +10,13 @@ export default function PeerWindow(props: PeerWindowProps) {
 
     useEffect(() => {
         const stream = new MediaStream();
-        props.consumers_promises.forEach((promise) => {
-            if(promise) {
-                promise.then((consumer) => {
-                    stream.addTrack(consumer.track);
-                })
-            }
+        props.consumers.forEach((consumer) => {
+            stream.addTrack(consumer.track);
         })
         if(videoRef.current) {
             videoRef.current.srcObject = stream;
         }
-    }, [props.consumers_promises]);
+    }, [props.consumers]);
 
     return (<>
         <video ref={videoRef} autoPlay />
