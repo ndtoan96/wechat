@@ -20,15 +20,21 @@ const webRtcTransportOptions: WebRtcTransportOptions = {
     preferUdp: true,
 };
 
-const port = process.env.PORT || 3002;
+const port = process.env.PORT || 3001;
 
 // Set up express app
 const app = express();
 app.use(cors(corsOptions));
 
 // Create "/api" router
-const apiRouter = express.Router()
+const apiRouter = express.Router();
 apiRouter.use(express.json());
+app.use((req, res, next) => {
+    res.on("finish", () => {
+        console.log(`${req.method} ${req.url} | Status: ${res.statusCode} ${res.statusMessage}`);
+    });
+    next();
+});
 app.use("/api", apiRouter);
 
 // Set up server and socket server
@@ -52,6 +58,7 @@ interface Peer {
 // Handle socket events
 let peers = new Map<string, Peer>();
 io.of("/room").on("connection", (socket) => {
+    console.log("New socket connected", socket.id);
     let peer: Peer = {
         socket: socket,
         producers: [],
@@ -61,6 +68,7 @@ io.of("/room").on("connection", (socket) => {
     socket.broadcast.emit("peer-change", { event: "peer-join", socketId: socket.id });
 
     socket.on("disconnect", () => {
+        console.log("Socket disconnected", socket.id);
         peers.delete(socket.id);
         socket.broadcast.emit("peer-change", { event: "peer-left", socketId: socket.id });
         socket.disconnect();
@@ -69,14 +77,66 @@ io.of("/room").on("connection", (socket) => {
 
 const init = async () => {
     const worker = await createWorker();
-    const mediasoupRouter = await worker.createRouter();
+    const mediasoupRouter = await worker.createRouter({
+        mediaCodecs: [
+            {
+                kind: 'audio',
+                mimeType: 'audio/opus',
+                clockRate: 48000,
+                channels: 2
+            },
+            {
+                kind: 'video',
+                mimeType: 'video/VP8',
+                clockRate: 90000,
+                parameters:
+                {
+                    'x-google-start-bitrate': 1000
+                }
+            },
+            {
+                kind: 'video',
+                mimeType: 'video/VP9',
+                clockRate: 90000,
+                parameters:
+                {
+                    'profile-id': 2,
+                    'x-google-start-bitrate': 1000
+                }
+            },
+            {
+                kind: 'video',
+                mimeType: 'video/h264',
+                clockRate: 90000,
+                parameters:
+                {
+                    'packetization-mode': 1,
+                    'profile-level-id': '4d0032',
+                    'level-asymmetry-allowed': 1,
+                    'x-google-start-bitrate': 1000
+                }
+            },
+            {
+                kind: 'video',
+                mimeType: 'video/h264',
+                clockRate: 90000,
+                parameters:
+                {
+                    'packetization-mode': 1,
+                    'profile-level-id': '42e01f',
+                    'level-asymmetry-allowed': 1,
+                    'x-google-start-bitrate': 1000
+                }
+            }
+        ]
+    });
 
     // Return information of all connected peers in the room
     apiRouter.get("/peers", (_, res) => {
         let clientPeers: Array<Object> = [];
         peers.forEach((peer) => {
-            const producers = peer.producers.map((p) => { p.id; });
-            const consumers = peer.consumers.map((c) => { c.id; });
+            const producers = peer.producers.map((p) => { return p.id; });
+            const consumers = peer.consumers.map((c) => { return c.id; });
             clientPeers.push({
                 socketId: peer.socket.id,
                 produceTransportId: peer.produceTransport?.id,
@@ -112,7 +172,7 @@ const init = async () => {
                 dtlsParameters: transport.dtlsParameters,
             });
         } else {
-            res.status(httpConstants.HTTP_STATUS_NOT_FOUND);
+            res.sendStatus(httpConstants.HTTP_STATUS_NOT_FOUND);
         }
     });
 
@@ -124,28 +184,28 @@ const init = async () => {
         const peer = peers.get(socketId);
         const transport = isSender ? peer?.produceTransport : peer?.consumeTransport;
         if (transport !== undefined) {
-            await transport.connect({dtlsParameters});
-            res.status(httpConstants.HTTP_STATUS_OK);
+            await transport.connect({ dtlsParameters });
+            res.sendStatus(httpConstants.HTTP_STATUS_OK);
         } else {
-            res.status(httpConstants.HTTP_STATUS_NOT_FOUND);
+            res.sendStatus(httpConstants.HTTP_STATUS_NOT_FOUND);
         }
-    })
+    });
 
     // Instruct server side transport to produce media, create producer and then return the its id
     apiRouter.post("/transport_produce", async (req, res) => {
         const socketId: string = req.body.socketId;
         let peer = peers.get(socketId);
         const transport = peer?.produceTransport;
-        if (transport) {
+        if (peer !== undefined && transport !== undefined) {
             const producer = await transport.produce({
                 kind: req.body.kind,
                 rtpParameters: req.body.rtpParameters,
             });
-            peer?.producers.push(producer);
-            peer?.socket.broadcast.emit("peer-change", {event: "new-producer", socketId: peer.socket.id, producerId: producer.id});
+            peer.producers.push(producer);
+            peer.socket.broadcast.emit("peer-change", { event: "new-producer", socketId: peer.socket.id, producerId: producer.id });
             res.json(producer.id);
         } else {
-            res.status(httpConstants.HTTP_STATUS_NOT_FOUND);
+            res.sendStatus(httpConstants.HTTP_STATUS_NOT_FOUND);
         }
     });
 
@@ -167,10 +227,10 @@ const init = async () => {
                     rtpParameters: consumer.rtpParameters,
                 });
             } else {
-                res.status(httpConstants.HTTP_STATUS_NOT_FOUND);
+                res.sendStatus(httpConstants.HTTP_STATUS_NOT_FOUND);
             }
         } else {
-            res.status(httpConstants.HTTP_STATUS_PRECONDITION_FAILED);
+            res.sendStatus(httpConstants.HTTP_STATUS_PRECONDITION_FAILED);
         }
     });
 
@@ -185,7 +245,7 @@ const init = async () => {
             peer.consumers.forEach((consumer) => {
                 if (consumer.id === consumerId) {
                     found = true;
-                    switch(action) {
+                    switch (action) {
                         case "pause": {
                             consumer.pause();
                             break;
@@ -199,19 +259,19 @@ const init = async () => {
                             break;
                         }
                         default: {
-                            res.status(httpConstants.HTTP_STATUS_BAD_REQUEST);
+                            res.sendStatus(httpConstants.HTTP_STATUS_BAD_REQUEST);
                             return;
                         }
                     }
                 }
             });
             if (found) {
-                res.status(httpConstants.HTTP_STATUS_OK);
+                res.sendStatus(httpConstants.HTTP_STATUS_OK);
             } else {
-                res.status(httpConstants.HTTP_STATUS_NOT_FOUND);
+                res.sendStatus(httpConstants.HTTP_STATUS_NOT_FOUND);
             }
         } else {
-            res.status(httpConstants.HTTP_STATUS_NOT_FOUND);
+            res.sendStatus(httpConstants.HTTP_STATUS_NOT_FOUND);
         }
     });
 
@@ -226,7 +286,7 @@ const init = async () => {
             peer.producers.forEach((producer) => {
                 if (producer.id === producerId) {
                     found = true;
-                    switch(action) {
+                    switch (action) {
                         case "pause": {
                             producer.pause();
                             break;
@@ -240,19 +300,19 @@ const init = async () => {
                             break;
                         }
                         default: {
-                            res.status(httpConstants.HTTP_STATUS_BAD_REQUEST);
+                            res.sendStatus(httpConstants.HTTP_STATUS_BAD_REQUEST);
                             return;
                         }
                     }
                 }
             });
             if (found) {
-                res.status(httpConstants.HTTP_STATUS_OK);
+                res.sendStatus(httpConstants.HTTP_STATUS_OK);
             } else {
-                res.status(httpConstants.HTTP_STATUS_NOT_FOUND);
+                res.sendStatus(httpConstants.HTTP_STATUS_NOT_FOUND);
             }
         } else {
-            res.status(httpConstants.HTTP_STATUS_NOT_FOUND);
+            res.sendStatus(httpConstants.HTTP_STATUS_NOT_FOUND);
         }
     });
 };

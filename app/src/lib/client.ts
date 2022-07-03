@@ -31,8 +31,11 @@ export class Participant {
     }
 
     async consumeMedia(producerId: string) {
-        const res = await fetch(`${this.baseUrl}/api/transport_consume`, {
+        let res = await fetch(`${this.baseUrl}/api/transport_consume`, {
             method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+            },
             body: JSON.stringify({
                 socketId: this.socket.id,
                 producerId: producerId,
@@ -42,6 +45,18 @@ export class Participant {
         handleResponseStatus(res);
         const consumerOptions: ConsumerOptions = await res.json();
         const consumer = await this.recvTransport.consume({ ...consumerOptions });
+        res = await fetch(`${this.baseUrl}/api/control_consumer`, {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                socketId: this.socket.id,
+                consumerId: consumerOptions.id,
+                action: "resume",
+            })
+        })
+        handleResponseStatus(res);
         return consumer;
     }
 
@@ -58,6 +73,17 @@ export const createParticipant = async (options?: InitOptions) => {
 
     // Init client socket
     const socket = io(`${baseUrl}/room`);
+    socket.on("connect", () => {
+        console.log("Socket connected", socket.id);
+    })
+
+    const waitForSocketConnection = async () => {
+        while(socket.id === undefined) {
+            return new Promise((resolve) => setTimeout(resolve, 200));
+        }
+    }
+
+    await waitForSocketConnection();
 
     // Init device
     const device = new Device();
@@ -73,6 +99,9 @@ export const createParticipant = async (options?: InitOptions) => {
     let transportOptions: TransportOptions;
     res = await fetch(`${baseUrl}/api/create_transport`, {
         method: "POST",
+        headers: {
+            'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
             socketId: socket.id,
             isSender: true,
@@ -87,6 +116,9 @@ export const createParticipant = async (options?: InitOptions) => {
         try {
             const _res = await fetch(`${baseUrl}/api/transport_connect`, {
                 method: "POST",
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
                     socketId: socket.id,
                     isSender: true,
@@ -105,6 +137,9 @@ export const createParticipant = async (options?: InitOptions) => {
         try {
             const _res = await fetch(`${baseUrl}/api/transport_produce`, {
                 method: "POST",
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
                     socketId: socket.id,
                     kind: parameters.kind,
@@ -122,6 +157,9 @@ export const createParticipant = async (options?: InitOptions) => {
     // Create receive transport on both server and client side
     res = await fetch(`${baseUrl}/api/create_transport`, {
         method: "POST",
+        headers: {
+            'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
             socketId: socket.id,
             isSender: false,
@@ -136,6 +174,9 @@ export const createParticipant = async (options?: InitOptions) => {
         try {
             const _res = await fetch(`${baseUrl}/api/transport_connect`, {
                 method: "POST",
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
                     socketId: socket.id,
                     isSender: false,
