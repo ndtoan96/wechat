@@ -1,5 +1,5 @@
 import { Consumer } from "mediasoup-client/lib/Consumer";
-import React, { Suspense, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 
 interface PeerWindowProps {
     consumers: Consumer[];
