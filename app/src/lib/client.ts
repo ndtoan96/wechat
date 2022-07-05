@@ -77,6 +77,10 @@ export const createParticipant = async (options?: InitOptions) => {
         console.log("Socket connected", socket.id);
     })
 
+    socket.on("disconnect", () => {
+        console.log("Socket disconnected", socket.id);
+    })
+
     const waitForSocketConnection = async () => {
         while(socket.id === undefined) {
             return new Promise((resolve) => setTimeout(resolve, 200));

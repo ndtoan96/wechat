@@ -11,72 +11,74 @@ interface PeerChangeData {
 
 export default function PeersWindows() {
     const participant = useContext(ParticipantContext);
-    const [firstInit, setFirstInit] = useState(true);
-    const [peerConsumers, setPeerConsumers] = useState<Map<string, Consumer[]>>(new Map());
-    const [peerWindows, setPeerWindows] = useState<JSX.Element[]>([]);
+    const [consumerMap, setConsumerMap] = useState(new Map<string, Consumer[]>());
 
     useEffect(() => {
-        const refreshPeerWindows = () => {
-            let newPeerWindows: JSX.Element[] = [];
-            peerConsumers.forEach((consumers, socketId) => {
-                newPeerWindows.push(<PeerWindow key={socketId} consumers={consumers} />);
-            });
-            setPeerWindows(newPeerWindows);
-        };
         participant?.socket.on("peer-change", async ({ event, socketId, producerId }: PeerChangeData) => {
             switch (event) {
                 case "peer-join": {
-                    // Do nothing since new peer has not produced
+                    setConsumerMap((prev) => {
+                        const newMap = new Map(prev);
+                        newMap.set(socketId, []);
+                        return newMap;
+                    });
                     break;
                 }
                 case "peer-left": {
-                    setPeerConsumers((prev) => {
-                        prev.delete(socketId);
-                        return prev;
+                    setConsumerMap((prev) => {
+                        const newMap = new Map(prev);
+                        newMap.delete(socketId);
+                        return newMap;
                     });
                     break;
                 }
                 case "new-producer": {
-                    if (producerId !== undefined) {
-                        const newConsumer = await participant.consumeMedia(producerId);
-                        setPeerConsumers((prev) => {
-                            if (prev.has(socketId)) {
-                                prev.get(socketId)?.push(newConsumer);
-                            } else {
-                                prev.set(socketId, [newConsumer]);
-                            }
-                            return prev;
-                        });
-                    } else {
-                        throw new Error("ProducerId is undefined");
-                    }
+                    const newConsumer = await participant.consumeMedia(producerId!);
+                    setConsumerMap((prev) => {
+                        const newMap = new Map(prev);
+                        const oldConsumers = prev.get(socketId);
+                        if (oldConsumers) {
+                            newMap.set(socketId, [...oldConsumers, newConsumer]);
+                        } else {
+                            newMap.set(socketId, [newConsumer]);
+                        }
+                        return newMap;
+                    });
                     break;
                 }
                 default: {
-                    throw new Error("Unexpected peer-change event");
+                    throw new Error("unexpected peer-change event");
                 }
             }
-            refreshPeerWindows();
         });
-        if (firstInit === true) {
-            participant?.getPeers().then((peers) => {
-                peers.forEach((peer) => {
-                    if(peer.socketId !== participant.socket.id) {
-                        peer.producers.forEach(async (producerId) => {
-                            const consumer = await participant.consumeMedia(producerId);
-                            if (peerConsumers.has(peer.socketId)) {
-                                peerConsumers.get(peer.socketId)?.push(consumer);
-                            } else {
-                                peerConsumers.set(peer.socketId, [consumer]);
-                            }
-                        });
-                    }
-                });
-                setFirstInit(false);
-                refreshPeerWindows();
-            });
-        }
-    }, [participant, firstInit, peerConsumers]);
 
-    return (<> {peerWindows} </>);
+        participant?.getPeers().then(async (peers) => {
+            const newConsumerMap: Map<string, Consumer[]> = new Map();
+            for (let peer of peers) {
+                if (peer.socketId !== participant.socket.id) {
+                    const consumers: Consumer[] = [];
+                    for (let producerId of peer.producers) {
+                        const consumer = await participant.consumeMedia(producerId);
+                        consumers.push(consumer);
+                    }
+                    newConsumerMap.set(peer.socketId, consumers);
+                }
+            }
+            setConsumerMap(newConsumerMap);
+        });
+        return () => {
+            participant?.socket.off("peer-change");
+        };
+    }, [participant]);
+
+    const peerWindows: JSX.Element[] = [];
+    consumerMap.forEach((consumers, socketId) => {
+        peerWindows.push(<PeerWindow consumers={consumers} key={socketId} />);
+    });
+
+    return (
+        <>
+            {peerWindows}
+        </>
+    );
 }
