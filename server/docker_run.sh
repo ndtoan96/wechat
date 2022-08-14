@@ -1,0 +1,1 @@
+docker run -p 3001:3001 -p 2000-2020:2000-2020/udp -p 2000-2020:2000-2020/tcp -it --rm --init wechat

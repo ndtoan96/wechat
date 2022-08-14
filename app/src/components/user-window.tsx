@@ -7,11 +7,13 @@ export default function UserWindow() {
 
     useEffect(() => {
         navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then((stream) => {
-            const track = stream.getTracks()[0];
             if(videoEl.current) {
                 videoEl.current.srcObject = stream;
             }
-            participant?.produceMedia({ track });
+            
+            for (let track of stream.getTracks()) {
+                participant?.produceMedia({ track });
+            }
         });
     }, [participant]);
 

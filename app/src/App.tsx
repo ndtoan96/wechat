@@ -11,6 +11,7 @@ function App() {
 
   useEffect(() => {
     createParticipant({ baseUrl: "http://localhost:3001" }).then((_participant) => setParticipant(_participant));
+    // createParticipant({ baseUrl: "https://pfiev-wechat.fly.dev" }).then((_participant) => setParticipant(_participant));
   }, []);
 
   return (

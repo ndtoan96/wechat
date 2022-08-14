@@ -55,7 +55,7 @@ export class Participant {
                 consumerId: consumerOptions.id,
                 action: "resume",
             })
-        })
+        });
         handleResponseStatus(res);
         return consumer;
     }
@@ -75,17 +75,25 @@ export const createParticipant = async (options?: InitOptions) => {
     const socket = io(`${baseUrl}/room`);
     socket.on("connect", () => {
         console.log("Socket connected", socket.id);
-    })
+    });
 
     socket.on("disconnect", () => {
         console.log("Socket disconnected", socket.id);
-    })
+    });
 
-    const waitForSocketConnection = async () => {
-        while(socket.id === undefined) {
-            return new Promise((resolve) => setTimeout(resolve, 200));
-        }
-    }
+    const waitForSocketConnection = () => {
+        const poll = (resolve: () => void) => {
+            if (socket.id === undefined) {
+                setTimeout(() => {
+                    console.log("waiting...");
+                    poll(resolve);
+                }, 200);
+            } else {
+                resolve();
+            }
+        };
+        return new Promise<void>(poll);
+    };
 
     await waitForSocketConnection();
 
@@ -97,10 +105,11 @@ export const createParticipant = async (options?: InitOptions) => {
     res = await fetch(`${baseUrl}/api/rtp_capabilities`);
     handleResponseStatus(res);
     const rtpCapabilities = await res.json();
-    await device.load({routerRtpCapabilities: rtpCapabilities});
+    await device.load({ routerRtpCapabilities: rtpCapabilities });
 
     // Create send transport on both server and client side
     let transportOptions: TransportOptions;
+    console.log("Should init already");
     res = await fetch(`${baseUrl}/api/create_transport`, {
         method: "POST",
         headers: {

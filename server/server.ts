@@ -11,11 +11,11 @@ import { constants as httpConstants } from 'http2';
 import { RouterOptions } from 'mediasoup/node/lib/Router';
 
 const corsOptions = {
-    origin: ["http://127.0.0.1:3000", "http://localhost:3000"],
+    origin: "*",
 };
 
 const webRtcTransportOptions: WebRtcTransportOptions = {
-    listenIps: ["127.0.0.1", "0.0.0.0"],
+    listenIps: [{ip: "0.0.0.0", announcedIp: process.env.HOST_PUBLIC_IP || "127.0.0.1"}],
     enableTcp: true,
     enableUdp: true,
     preferUdp: true,
@@ -81,6 +81,9 @@ const port = process.env.PORT || 3001;
 const app = express();
 app.use(cors(corsOptions));
 
+// Serve static files
+app.use(express.static("static/build"));
+
 // Create "/api" router
 const apiRouter = express.Router();
 apiRouter.use(express.json());
@@ -131,7 +134,10 @@ io.of("/room").on("connection", (socket) => {
 });
 
 const init = async () => {
-    const worker = await createWorker();
+    const worker = await createWorker({
+        rtcMaxPort: 2020,
+        rtcMinPort: 2000,
+    });
     const mediasoupRouter = await worker.createRouter(routerOptions);
 
     // Return information of all connected peers in the room
